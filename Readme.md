@@ -10,3 +10,10 @@ Key features include:
 .Low-level socket programming using POSIX APIs
 
 This is version one i will be imporving it and also make it more clean.
+
+
+To run the application just run 
+g++ main.cxx message.cxx -o Server
+g++ Client.cxx message.cxx -o Client
+and then start the server with ./Server
+and then client as ./Client
