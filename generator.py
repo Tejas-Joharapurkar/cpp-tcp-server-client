@@ -5,7 +5,7 @@
 #     char[8]  symbol
 #     uint32   side
 # }
-
+import os
 size_map = {
     "double": 8,
     "uint32": 4,
@@ -23,6 +23,15 @@ padding_map = {
     6 : {"type" : "char", "name" : "padding", "size" : 6},
     7 : {"type" : "char", "name" : "padding", "size" : 7},
 }
+# schema type → C++ type
+type_map = {
+    "double": "double",
+    "uint32": "std::uint32_t",
+    "uint16": "std::uint16_t",
+    "uint8":  "std::uint8_t",
+    "char":   "char",
+}
+
 def get_size(field):
     if field["type"] == "char":
         return int(field["size"])
@@ -89,4 +98,51 @@ def printmap(messages):
                 else:
                     print(f"{field["type"]} {field["name"]}")
     
-parse('example.txt')
+
+def GenrateMessage(messages):
+    os.makedirs("Messages", exist_ok=True)
+    for message in messages.keys():
+        file_path = os.path.join("Messages",message)
+        with open(f"{file_path}.hxx","w") as file:
+            file.write("#include <cstdint> \n")
+            file.write(f"struct {message} {{ \n")
+            for field in messages[message]:
+                if(field["type"] == "char"):
+                    file.write(f"char {field["name"]}[{field["size"]}];\n")
+                else:
+                    file.write(f"{type_map[field["type"]]} {field["name"]};\n")
+            file.write("};\n")
+            file.write(f"int encode(const {message}& msg, char* buf, int bufSize);\n")
+            file.write(f"int decode(const char* buf, {message}& msg);\n")
+            file.close()
+
+        with open(f"{file_path}.cxx", "w") as file:
+            file.write(f'#include "{message}.hxx"\n')
+            file.write(f'#include <cstring>\n\n')
+            
+            # encode
+            file.write(f"int encode(const {message}& msg, char* buf, int bufSize) {{\n")
+            file.write(f"    char* ptr = buf;\n")
+            for field in messages[message]:
+                if field["type"] == "char":
+                    file.write(f'    memcpy(ptr, msg.{field["name"]}, {field["size"]});\n ptr += {field["size"]};\n')
+                else:
+                    size = size_map[field["type"]]
+                    file.write(f'    memcpy(ptr, &msg.{field["name"]}, {size});\n ptr += {size};\n')
+            file.write(f"    return ptr - buf;\n")
+            file.write(f"}}\n\n")
+            
+            # decode
+            file.write(f"int decode(const char* buf, {message}& msg) {{\n")
+            file.write(f"    const char* ptr = buf;\n")
+            for field in messages[message]:
+                if field["type"] == "char":
+                    file.write(f'    memcpy(msg.{field["name"]}, ptr, {field["size"]});\n ptr += {field["size"]};\n')
+                else:
+                    size = size_map[field["type"]]
+                    file.write(f'    memcpy(&msg.{field["name"]}, ptr, {size});\n ptr += {size};\n')
+            file.write(f"    return ptr - buf;\n")
+            file.write(f"}}\n")
+
+parse('messages.msg')
+GenrateMessage(messages)

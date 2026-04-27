@@ -31,7 +31,7 @@ All sizes use fixed-width types (`uint32_t`, `uint16_t` etc.) instead of `int` o
 
 **Memory Alignment**
 
-Rather than slapping `#pragma pack` on everything, the code handles alignment explicitly. The idea is simple — a CPU reads memory in fixed-size chunks, so if a field straddles a chunk boundary it either causes extra reads or crashes on ARM. The fix is to insert filler bytes before any field that would split across a boundary, and pad the end of the struct so the total size is a multiple of 8.
+Rather than slapping `#pragma pack` on everything, the code handles alignment explicitly. The idea is simple — a CPU reads memory in fixed-size chunks (8 bytes on 64-bit), so if a field straddles a chunk boundary it either causes extra reads or crashes on ARM. The fix is to insert filler bytes before any field that would split across a boundary, and pad the end of the struct so the total size is a multiple of 8.
 
 The alignment rule: `offset % field_size == 0` before placing any field. If not, insert a filler of `field_size - (offset % field_size)` bytes first.
 
@@ -48,55 +48,46 @@ message Order {
 }
 ```
 
-The generator parses it, sorts fields in descending size order to minimize padding, calculates where fillers need to go, and spits out a C++ struct with correct alignment — no `#pragma pack` needed because the layout is already correct by construction.
+The generator parses the schema, sorts fields in descending size order to minimize padding, calculates where fillers need to go, and generates a C++ struct + encode/decode functions — no `#pragma pack` needed because the layout is already correct by construction.
 
 The inspiration came from how trading firms handle message definitions — instead of writing encode/decode by hand for every message type, you define the schema once and generate the boilerplate.
+
+Currently supported:
+- Primitive types — `double`, `uint32`, `uint16`, `uint8`
+- Fixed-size char arrays — `char[N]`
+- Automatic filler insertion for inter-field and end padding
+- Generates `.hxx` (struct definition) and `.cxx` (encode/decode implementation)
+
+Work in progress:
+- Nested custom struct as field type
+- Header encode/decode with runtime `bodyLen` calculation
+- Dependency ordering — generate leaf structs before structs that use them
 
 ---
 
 ## How to run
 
 ```bash
-# Build
+# Build server and client
 g++ -std=c++17 -o server server.cxx message.cxx -lpthread
 g++ -std=c++17 -o client client.cxx message.cxx -lpthread
 
 # Run server first, then client
 ./server
 ./client
+
+# Run the code generator
+python3 generator.py messages.msg
+# Produces: Messages/Order.hxx, Messages/Order.cxx
 ```
 
 ---
 
 ## What's next
 
-- Replace thread-per-client with an `epoll` event loop
+- Nested struct support in the generator
+- Header encode/decode generation
+- Ring buffer for partial TCP read handling
+- Replace thread-per-client with an `epoll` / `kqueue` event loop
 - RESP protocol parser (Redis wire format)
 - Mini Redis clone — SET, GET, DEL, TTL over TCP
-- Hook the code generator up to produce full encode/decode functions, not just the struct
-
-
-
-
-
-
-
-This project implements a TCP-based client-server system in C++ with support for handling multiple concurrent client connections. It features a custom binary message encoding and decoding mechanism along with a TCP framing protocol to ensure reliable and structured communication over streaming sockets.
-
-The system demonstrates low-level network programming using POSIX socket APIs, efficient memory handling, and concurrency management. It simulates real-world backend communication by enabling structured data exchange between multiple clients and the server.
-
-Key features include:
-
-.Concurrent client handling using multithreading
-.Custom message encoding/decoding for efficient data transfer
-.TCP framing protocol to handle partial reads/writes
-.Low-level socket programming using POSIX APIs
-
-This is version one i will be imporving it and also make it more clean.
-
-
-To run the application just run 
-g++ main.cxx message.cxx -o Server
-g++ Client.cxx message.cxx -o Client
-and then start the server with ./Server
-and then client as ./Client
