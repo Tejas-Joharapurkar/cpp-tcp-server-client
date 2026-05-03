@@ -2,5 +2,5 @@ a.out
 *.o
 *.out
 *.exe
-build/
+Build/
 Messages/
